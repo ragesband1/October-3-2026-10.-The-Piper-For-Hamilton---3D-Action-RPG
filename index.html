@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>10. The Piper For Hamilton - 3D Action RPG</title>
+    <!-- Tailwind CSS for modern HUD layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=MedievalSharp&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            user-select: none;
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0c10;
+            color: #f3f4f6;
+        }
+
+        .font-cinzel { font-family: 'Cinzel', serif; }
+        .font-medieval { font-family: 'MedievalSharp', cursive; }
+
+        /* Parchment Theme Styling */
+        .parchment-bg {
+            background: linear-gradient(135deg, #1e1b18 0%, #2a241e 100%);
+            border: 2px solid #b8860b;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 0 20px rgba(184, 134, 11, 0.3);
+        }
+
+        .gold-border {
+            border: 2px solid #daa520;
+            box-shadow: 0 0 8px rgba(218, 165, 32, 0.4);
+        }
+
+        .btn-gold {
+            background: linear-gradient(180deg, #d4af37 0%, #996515 100%);
+            color: #111;
+            font-weight: bold;
+            border: 1px solid #ffe89c;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+            transition: all 0.2s ease;
+        }
+
+        .btn-gold:hover {
+            background: linear-gradient(180deg, #f3e5ab 0%, #b8860b 100%);
+            box-shadow: 0 0 12px rgba(212, 175, 55, 0.8);
+            transform: translateY(-1px);
+        }
+
+        .btn-gold:active {
+            transform: translateY(1px);
+        }
+
+        /* Health & Resource Bars */
+        .bar-container {
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #4a4a4a;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        /* Floating Damage Text */
+        .damage-popup {
+            position: absolute;
+            font-weight: 900;
+            font-family: 'Cinzel', serif;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { transform: translateY(-25px) scale(1.3); }
+            100% { opacity: 0; transform: translateY(-45px) scale(0.9); }
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(10,10,10,0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #8b6508;
+            border-radius: 3px;
+        }
+
+        /* Radial Vignette Overlay for Game HUD */
+        #vignette {
+            pointer-events: none;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.7);
+        }
+
+        /* Reticle Dot */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            background: rgba(255,255,255,0.6);
+            border: 1px solid rgba(0,0,0,0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas Layer -->
+    <div id="canvas-container" class="w-full h-full absolute inset-0"></div>
+
+    <!-- Vignette effect overlay -->
+    <div id="vignette" class="w-full h-full absolute inset-0"></div>
+
+    <!-- Center Crosshair for Aiming -->
+    <div id="crosshair"></div>
+
+    <!-- MAIN HUD OVERLAY -->
+    <div id="hud" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 sm:p-6">
+        
+        <!-- TOP BAR: Character Stats, Level & Mini-map -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Stats Widget -->
+            <div class="pointer-events-auto parchment-bg rounded-lg p-3 w-64 sm:w-80 flex flex-col gap-2">
+                <div class="flex items-center justify-between border-b border-amber-800/60 pb-1">
+                    <div class="flex items-center gap-2">
+                        <span id="player-class-badge" class="bg-amber-900/80 text-amber-200 text-xs px-2 py-0.5 rounded border border-amber-600 font-bold">HAMILTON GUARD</span>
+                        <h2 id="player-name" class="font-cinzel text-amber-300 font-bold text-sm sm:text-base">Hero of Hamilton</h2>
+                    </div>
+                    <span id="player-level" class="font-bold text-amber-400 text-xs sm:text-sm bg-black/60 px-2 py-0.5 rounded border border-amber-900">LVL 1</span>
+                </div>
+
+                <!-- Health Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-semibold mb-0.5">
+                        <span class="text-red-400"><i class="fa-solid fa-heart mr-1"></i>Health</span>
+                        <span id="hp-text" class="text-gray-200">100 / 100</span>
+                    </div>
+                    <div class="bar-container h-3 w-full">
+                        <div id="hp-bar" class="bg-gradient-to-r from-red-700 to-red-500 h-full w-full transition-all duration-200"></div>
+                    </div>
+                </div>
+
+                <!-- Mana / Stamina Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-semibold mb-0.5">
+                        <span class="text-blue-400"><i class="fa-solid fa-bolt mr-1"></i>Stamina</span>
+                        <span id="mp-text" class="text-gray-200">50 / 50</span>
+                    </div>
+                    <div class="bar-container h-2.5 w-full">
+                        <div id="mp-bar" class="bg-gradient-to-r from-blue-700 to-cyan-400 h-full w-full transition-all duration-200"></div>
+                    </div>
+                </div>
+
+                <!-- EXP Bar -->
+                <div>
+                    <div class="flex justify-between text-xs text-amber-300/80 mb-0.5">
+                        <span>EXP</span>
+                        <span id="exp-text">0 / 100</span>
+                    </div>
+                    <div class="bar-container h-1.5 w-full bg-black/80">
+                        <div id="exp-bar" class="bg-amber-400 h-full w-0 transition-all duration-200"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini Map & Active Location -->
+            <div class="pointer-events-auto flex flex-col items-end gap-2">
+                <div class="relative w-32 h-32 sm:w-40 sm:h-40 rounded-full border-2 border-amber-600/80 bg-black/80 overflow-hidden shadow-lg">
+                    <canvas id="minimap-canvas" class="w-full h-full"></canvas>
+                    <div class="absolute inset-0 rounded-full pointer-events-none border-2 border-amber-500/30"></div>
+                    <!-- Center Dot (Player) -->
+                    <div class="absolute top-1/2 left-1/2 w-2.5 h-2.5 bg-cyan-400 border border-white rounded-full -translate-x-1/2 -translate-y-1/2 shadow-sm shadow-cyan-300"></div>
+                </div>
+                <div class="parchment-bg px-3 py-1 rounded text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-red-500"></i>
+                    <span id="location-name">Hamilton Village</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MIDDLE SIDE: Quest Tracker Panel -->
+        <div class="pointer-events-auto self-start mt-4 max-w-xs parchment-bg rounded-lg p-3 border-amber-900/60 hidden sm:block">
+            <h3 class="font-cinzel text-amber-400 text-xs font-bold border-b border-amber-800/40 pb-1 mb-2 flex justify-between items-center">
+                <span><i class="fa-solid fa-scroll mr-1.5"></i>CURRENT QUEST</span>
+                <span id="quest-number-tag" class="text-amber-500/80 text-[10px]">Q1</span>
+            </h3>
+            <div id="quest-tracker-title" class="text-amber-200 font-semibold text-xs mb-1">Clean Leftover Trash</div>
+            <p id="quest-tracker-desc" class="text-gray-300 text-[11px] leading-relaxed mb-2">Exterminate the contagious giant rats eating the leftover trash piles outside Hamilton village.</p>
+            <div class="flex justify-between items-center text-[11px] font-bold text-amber-400">
+                <span>Progress:</span>
+                <span id="quest-tracker-progress">0 / 5 Rats</span>
+            </div>
+        </div>
+
+        <!-- BOTTOM AREA: Action Hotbar, Prompts & Controls Guide -->
+        <div class="flex flex-col items-center gap-2 w-full">
+            
+            <!-- NPC Interaction Prompt Box -->
+            <div id="interaction-prompt" class="pointer-events-none bg-black/80 border border-amber-500 text-amber-200 px-4 py-2 rounded-lg text-xs font-bold shadow-lg animate-pulse hidden">
+                Press <span class="bg-amber-600 text-black px-1.5 py-0.5 rounded font-mono mx-1">E</span> to Talk with <span id="npc-prompt-name" class="text-white">Villager</span>
+            </div>
+
+            <!-- Boss Health Bar Container (Hidden by default) -->
+            <div id="boss-hud" class="w-full max-w-xl parchment-bg p-2.5 rounded-lg flex-col gap-1 hidden">
+                <div class="flex justify-between items-center text-xs font-bold">
+                    <span id="boss-name" class="font-cinzel text-red-400 text-sm"><i class="fa-solid fa-skull mr-1"></i>THE PIPER FOR HAMILTON</span>
+                    <span id="boss-hp-text" class="text-gray-300">1000 / 1000</span>
+                </div>
+                <div class="bar-container h-4 w-full border-red-800">
+                    <div id="boss-hp-bar" class="bg-gradient-to-r from-red-800 via-red-600 to-amber-500 h-full w-full transition-all duration-150"></div>
+                </div>
+            </div>
+
+            <!-- Action Hotbar & Menu Toggle Buttons -->
+            <div class="pointer-events-auto flex items-center gap-2 sm:gap-4 bg-black/70 p-2 rounded-xl border border-amber-900/50 backdrop-blur-sm">
+                <!-- Skill 1: Basic Slash -->
+                <div class="relative group">
+                    <button id="btn-skill-1" onclick="useSkill(1)" class="w-10 h-10 sm:w-12 sm:h-12 bg-amber-950/80 border-2 border-amber-600 rounded-lg flex items-center justify-center text-amber-300 hover:bg-amber-800 transition">
+                        <i class="fa-solid fa-hand-fist text-lg"></i>
+                    </button>
+                    <span class="absolute -top-2 -right-2 bg-amber-600 text-black text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-black">LMB</span>
+                    <div class="absolute bottom-full mb-2 hidden group-hover:block parchment-bg p-2 rounded text-[10px] w-28 text-center text-amber-200">Sword Attack</div>
+                </div>
+
+                <!-- Skill 2: Heavy Cleave -->
+                <div class="relative group">
+                    <button id="btn-skill-2" onclick="useSkill(2)" class="w-10 h-10 sm:w-12 sm:h-12 bg-amber-950/80 border-2 border-amber-600 rounded-lg flex items-center justify-center text-amber-300 hover:bg-amber-800 transition">
+                        <i class="fa-solid fa-burst text-lg"></i>
+                    </button>
+                    <span class="absolute -top-2 -right-2 bg-amber-600 text-black text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-black">RMB</span>
+                    <div class="absolute bottom-full mb-2 hidden group-hover:block parchment-bg p-2 rounded text-[10px] w-28 text-center text-amber-200">Hypnotic Slash (15 MP)</div>
+                </div>
+
+                <!-- Skill 3: Shield Guard -->
+                <div class="relative group">
+                    <button id="btn-skill-3" onclick="useSkill(3)" class="w-10 h-10 sm:w-12 sm:h-12 bg-amber-950/80 border-2 border-amber-600 rounded-lg flex items-center justify-center text-amber-300 hover:bg-amber-800 transition">
+                        <i class="fa-solid fa-shield-halved text-lg"></i>
+                    </button>
+                    <span class="absolute -top-2 -right-2 bg-amber-600 text-black text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-black">Q</span>
+                    <div class="absolute bottom-full mb-2 hidden group-hover:block parchment-bg p-2 rounded text-[10px] w-28 text-center text-amber-200">Hamilton Shield Block</div>
+                </div>
+
+                <div class="h-8 w-px bg-amber-800/60 my-auto"></div>
+
+                <!-- Modals Buttons -->
+                <button onclick="toggleModal('inventory-modal')" class="w-9 h-9 sm:w-10 sm:h-10 parchment-bg rounded-lg flex items-center justify-center text-amber-300 hover:text-amber-100 transition" title="Inventory (I)">
+                    <i class="fa-solid fa-briefcase"></i>
+                </button>
+
+                <button onclick="toggleModal('skill-modal')" class="w-9 h-9 sm:w-10 sm:h-10 parchment-bg rounded-lg flex items-center justify-center text-amber-300 hover:text-amber-100 transition" title="Skill Tree (K)">
+                    <i class="fa-solid fa-spaghetti-monster-flying"></i>
+                </button>
+
+                <button onclick="toggleModal('story-modal')" class="w-9 h-9 sm:w-10 sm:h-10 parchment-bg rounded-lg flex items-center justify-center text-amber-300 hover:text-amber-100 transition" title="Story & Lore (L)">
+                    <i class="fa-solid fa-book-open"></i>
+                </button>
+
+                <button onclick="toggleCameraView()" class="w-9 h-9 sm:w-10 sm:h-10 parchment-bg rounded-lg flex items-center justify-center text-amber-300 hover:text-amber-100 transition" title="Toggle Camera (V)">
+                    <i id="camera-icon" class="fa-solid fa-video"></i>
+                </button>
+            </div>
+
+            <!-- Controls Helper Footer -->
+            <div class="text-[10px] text-gray-400 font-medium flex gap-3 bg-black/60 px-3 py-1 rounded-full">
+                <span><b>WASD</b> Move</span>
+                <span><b>SPACE</b> Jump</span>
+                <span><b>LMB</b> Attack</span>
+                <span><b>V</b> Camera View</span>
+                <span><b>E</b> Talk/Interact</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- DIALOGUE MODAL OVERLAY -->
+    <div id="dialogue-modal" class="fixed inset-0 bg-black/60 flex items-end justify-center pb-20 p-4 z-40 hidden pointer-events-auto">
+        <div class="parchment-bg rounded-xl max-w-2xl w-full p-5 shadow-2xl flex flex-col gap-3 border-2 border-amber-600">
+            <div class="flex items-center justify-between border-b border-amber-800/60 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 bg-amber-500 rounded-full animate-ping"></span>
+                    <h3 id="npc-dialogue-title" class="font-cinzel text-amber-300 font-bold text-lg">Villager of Hamilton</h3>
+                </div>
+                <span class="text-xs text-amber-500/80 font-mono">Press ENTER or click Next</span>
+            </div>
+            <p id="npc-dialogue-text" class="text-gray-200 text-sm sm:text-base leading-relaxed font-serif italic my-2">
+                "Oh my! The giant rats are everywhere eating the leftover trash outside our village! They carry contagious diseases! Someone help us!"
+            </p>
+            <div class="flex justify-end gap-3 mt-2">
+                <button onclick="closeDialogue()" class="px-4 py-1.5 text-xs rounded border border-gray-600 hover:bg-gray-800 text-gray-300">Close</button>
+                <button id="dialogue-next-btn" onclick="advanceDialogue()" class="btn-gold px-6 py-1.5 text-xs rounded">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVENTORY & EQUIPMENT MODAL -->
+    <div id="inventory-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 hidden pointer-events-auto">
+        <div class="parchment-bg rounded-xl max-w-3xl w-full p-6 shadow-2xl border-2 border-amber-600 flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center border-b border-amber-800 pb-3">
+                <h2 class="font-cinzel text-xl text-amber-300 font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-briefcase"></i> Inventory & Equipment
+                </h2>
+                <button onclick="toggleModal('inventory-modal')" class="text-gray-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 my-4 overflow-y-auto pr-1">
+                <!-- Equipment Slots -->
+                <div class="bg-black/50 p-4 rounded-lg border border-amber-900/60 flex flex-col gap-3">
+                    <h3 class="font-cinzel text-sm text-amber-400 font-bold border-b border-amber-900 pb-1">Equipped Gear</h3>
+                    <div class="flex items-center justify-between bg-amber-950/40 p-2.5 rounded border border-amber-900">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-sword text-amber-400 text-xl"></i>
+                            <div>
+                                <div class="text-xs font-bold text-amber-200" id="equipped-weapon-name">Hamilton Guard Shortsword</div>
+                                <div class="text-[10px] text-gray-400">Attack +15</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-amber-800/60 text-amber-200 px-2 py-0.5 rounded">Weapon</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-amber-950/40 p-2.5 rounded border border-amber-900">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-shield text-cyan-400 text-xl"></i>
+                            <div>
+                                <div class="text-xs font-bold text-amber-200" id="equipped-shield-name">Wooden Militia Shield</div>
+                                <div class="text-[10px] text-gray-400">Defense +10</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-amber-800/60 text-amber-200 px-2 py-0.5 rounded">Shield</span>
+                    </div>
+
+                    <!-- Detailed Player Combat Stats -->
+                    <div class="mt-2 pt-2 border-t border-amber-900/60 text-xs gap-1.5 flex flex-col">
+                        <div class="flex justify-between text-gray-300"><span>Base Attack:</span><span id="stat-atk" class="text-amber-400 font-bold">25</span></div>
+                        <div class="flex justify-between text-gray-300"><span>Base Defense:</span><span id="stat-def" class="text-cyan-400 font-bold">12</span></div>
+                        <div class="flex justify-between text-gray-300"><span>Movement Speed:</span><span id="stat-spd" class="text-green-400 font-bold">100%</span></div>
+                    </div>
+                </div>
+
+                <!-- Backpack Grid -->
+                <div class="bg-black/50 p-4 rounded-lg border border-amber-900/60">
+                    <h3 class="font-cinzel text-sm text-amber-400 font-bold border-b border-amber-900 pb-2 mb-3">Item Backpack</h3>
+                    <div id="inventory-grid" class="grid grid-cols-4 gap-2">
+                        <!-- Dynamic items generated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-2 border-t border-amber-800">
+                <button onclick="toggleModal('inventory-modal')" class="btn-gold px-5 py-1.5 text-xs rounded">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SKILL TREE MODAL -->
+    <div id="skill-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 hidden pointer-events-auto">
+        <div class="parchment-bg rounded-xl max-w-2xl w-full p-6 shadow-2xl border-2 border-amber-600 flex flex-col">
+            <div class="flex justify-between items-center border-b border-amber-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <h2 class="font-cinzel text-xl text-amber-300 font-bold"><i class="fa-solid fa-sitemap mr-2"></i>Skill Tree</h2>
+                    <span class="text-xs bg-amber-900 text-amber-200 px-2 py-0.5 rounded border border-amber-600">Points Available: <b id="skill-points-num">0</b></span>
+                </div>
+                <button onclick="toggleModal('skill-modal')" class="text-gray-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-6">
+                <!-- Skill 1 -->
+                <div class="bg-black/60 p-4 rounded-lg border border-amber-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <h4 class="font-cinzel font-bold text-amber-300 text-sm">Flute Cleave Mastery</h4>
+                            <span id="skill-lvl-1" class="text-xs text-amber-500 font-mono">Lvl 0/3</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300">Increases physical slash damage and spell impact radius by +15% per rank.</p>
+                    </div>
+                    <button id="btn-upgrade-skill-1" onclick="upgradeSkill(1)" class="btn-gold mt-3 py-1 text-xs rounded w-full">Upgrade Skill (1 Pt)</button>
+                </div>
+
+                <!-- Skill 2 -->
+                <div class="bg-black/60 p-4 rounded-lg border border-amber-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <h4 class="font-cinzel font-bold text-amber-300 text-sm">Hamilton Iron Will</h4>
+                            <span id="skill-lvl-2" class="text-xs text-amber-500 font-mono">Lvl 0/3</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300">Boosts maximum health by +30 HP and reduces incoming hypnosis wave damage.</p>
+                    </div>
+                    <button id="btn-upgrade-skill-2" onclick="upgradeSkill(2)" class="btn-gold mt-3 py-1 text-xs rounded w-full">Upgrade Skill (1 Pt)</button>
+                </div>
+
+                <!-- Skill 3 -->
+                <div class="bg-black/60 p-4 rounded-lg border border-amber-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <h4 class="font-cinzel font-bold text-amber-300 text-sm">Swift Footwork</h4>
+                            <span id="skill-lvl-3" class="text-xs text-amber-500 font-mono">Lvl 0/3</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300">Increases base movement speed by +10% and stamina recovery speed.</p>
+                    </div>
+                    <button id="btn-upgrade-skill-3" onclick="upgradeSkill(3)" class="btn-gold mt-3 py-1 text-xs rounded w-full">Upgrade Skill (1 Pt)</button>
+                </div>
+
+                <!-- Skill 4 -->
+                <div class="bg-black/60 p-4 rounded-lg border border-amber-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <h4 class="font-cinzel font-bold text-amber-300 text-sm">Volcanic Shielding</h4>
+                            <span id="skill-lvl-4" class="text-xs text-amber-500 font-mono">Lvl 0/3</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300">Shield block reflects 20% of incoming damage back at the attacker.</p>
+                    </div>
+                    <button id="btn-upgrade-skill-4" onclick="upgradeSkill(4)" class="btn-gold mt-3 py-1 text-xs rounded w-full">Upgrade Skill (1 Pt)</button>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-2 border-t border-amber-800">
+                <button onclick="toggleModal('skill-modal')" class="btn-gold px-5 py-1.5 text-xs rounded">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STORY & MORAL LESSON MODAL -->
+    <div id="story-modal" class="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50 pointer-events-auto">
+        <div class="parchment-bg rounded-xl max-w-2xl w-full p-6 shadow-2xl border-2 border-amber-600 flex flex-col max-h-[90vh]">
+            <div class="text-center border-b border-amber-800 pb-3">
+                <span class="text-xs font-bold text-amber-500 tracking-widest uppercase">March 3, 2017 — Chapter 2</span>
+                <h1 class="font-cinzel text-2xl text-amber-300 font-extrabold mt-1">10. The Piper For Hamilton</h1>
+                <p class="text-xs text-amber-400/80 italic font-serif">Written by: Peter Pintago</p>
+            </div>
+
+            <div class="my-4 overflow-y-auto pr-2 space-y-3 text-xs sm:text-sm text-gray-200 leading-relaxed font-serif">
+                <p class="first-letter:text-3xl first-letter:font-bold first-letter:text-amber-400">
+                    Once upon a time in a highest village there lived a people of Hamilton. They had trashes outside their place. One day thousands of rats ate the left-over foods without premises.
+                </p>
+                <p>
+                    When the people knew the particular evidence, they shouted: <span class="text-amber-300 italic">"Oh my, rats is a contagious disease affecting our health! Our gracious Piper, would you come to save us then let us go over the rats!"</span>
+                </p>
+                <p>
+                    Then the gracious Piper was present. He possessed a <b class="text-cyan-300">"Flute of Hypnosis"</b> so that rats would follow whatever the Piper said to leave out the town.
+                </p>
+                <p>
+                    When the rats had abandoned the town for left-over foods, people did not content with that experience — they did not congratulate nor reward the Piper. The Piper grew angry. He used his flute to hypnotize the children.
+                </p>
+                <p>
+                    Hypnotized by the Piper's flute, the children followed him into the volcano so they would never see their families again. When the people learned their lesson, they wept in despair over their disobedience and broken promises to the gracious Piper.
+                </p>
+
+                <!-- Moral Lesson Highlight Box -->
+                <div class="bg-amber-950/60 p-3.5 rounded-lg border border-amber-600/80 mt-4">
+                    <h4 class="font-cinzel text-amber-400 font-bold text-xs uppercase tracking-wider mb-1"><i class="fa-solid fa-quote-left mr-1.5"></i>Moral Lesson</h4>
+                    <p class="text-amber-100 text-xs italic font-sans leading-snug">
+                        "If you have a savior who saves you, please give him a reward. Don't underestimate treason or broken promises. In disobedience and mistrust, people suffer — even when there are no rats left."
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center pt-3 border-t border-amber-800">
+                <span class="text-[11px] text-gray-400">Press WASD to move in 3D world</span>
+                <button onclick="toggleModal('story-modal')" class="btn-gold px-6 py-2 text-xs rounded font-bold uppercase tracking-wider">Start Game / Resume</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVER / VICTORY MODAL -->
+    <div id="game-over-modal" class="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 hidden pointer-events-auto">
+        <div class="parchment-bg rounded-xl max-w-md w-full p-6 text-center border-2 border-red-700 shadow-2xl flex flex-col items-center gap-4">
+            <div id="game-over-icon" class="text-5xl text-red-500 mb-1"><i class="fa-solid fa-skull-crossbones"></i></div>
+            <h2 id="game-over-title" class="font-cinzel text-2xl font-bold text-red-400">YOU HAVE BEEN DEFEATED</h2>
+            <p id="game-over-desc" class="text-xs text-gray-300 leading-relaxed font-serif">
+                The hypnotic melodies of the Piper overwhelmed your senses in the active volcano...
+            </p>
+            <button onclick="restartGame()" class="btn-gold px-6 py-2 rounded text-xs font-bold uppercase tracking-wider mt-2">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        /* -------------------------------------------------------------------------- */
+        /*  AUDIO SYNTHESIZER (Web Audio API - No External Sound Assets Needed)      */
+        /* -------------------------------------------------------------------------- */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playAttack() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playFluteSpell() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
+                osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.1); // E5
+                osc.frequency.setValueAtTime(783.99, this.ctx.currentTime + 0.2); // G5
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.4);
+            }
+
+            playHit() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playLevelUp() {
+                if (!this.ctx) return;
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.1);
+                    gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.1 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.1);
+                    osc.stop(this.ctx.currentTime + idx * 0.1 + 0.25);
+                });
+            }
+        }
+
+        const audioFX = new SoundEngine();
+
+        /* -------------------------------------------------------------------------- */
+        /*  GLOBAL GAME STATE & QUEST SYSTEM DATA                                    */
+        /* -------------------------------------------------------------------------- */
+        const playerState = {
+            level: 1,
+            hp: 100,
+            maxHp: 100,
+            mp: 50,
+            maxMp: 50,
+            exp: 0,
+            maxExp: 100,
+            atk: 25,
+            def: 12,
+            speed: 0.18,
+            skillPoints: 0,
+            skills: { 1: 0, 2: 0, 3: 0, 4: 0 },
+            isBlocking: false,
+            currentQuestIndex: 0
+        };
+
+        const quests = [
+            {
+                id: 1,
+                title: "Exterminate Leftover Trash Rats",
+                desc: "The village of Hamilton is infested with giant contagious rats feasting on leftover trash. Kill 5 Trash Rats.",
+                targetCount: 5,
+                currentCount: 0,
+                locationName: "Hamilton Trash Piles"
+            },
+            {
+                id: 2,
+                title: "Negotiate with the Piper",
+                desc: "Talk to the gracious Piper in Hamilton center who used his Flute of Hypnosis to clear the pestilence.",
+                targetCount: 1,
+                currentCount: 0,
+                locationName: "Village Square"
+            },
+            {
+                id: 3,
+                title: "Investigate Villager Betrayal",
+                desc: "Speak to the weeping parents near the mountain pass after villagers refused to pay the Piper's reward.",
+                targetCount: 1,
+                currentCount: 0,
+                locationName: "Hamilton Outskirts"
+            },
+            {
+                id: 4,
+                title: "Defeat The Piper in Volcanic Zone",
+                desc: "Journey into the active volcanic crater to rescue the hypnotized children and confront The Piper Boss!",
+                targetCount: 1,
+                currentCount: 0,
+                locationName: "Volcanic Zone"
+            }
+        ];
+
+        let inventory = [
+            { name: "Leftover Trash Sample", type: "Quest Item", desc: "Smells awful. Evidence of Hamilton's neglect.", icon: "fa-trash-can" },
+            { name: "Health Elixir", type: "Consumable", desc: "Restores 50 HP immediately.", icon: "fa-flask" }
+        ];
+
+        /* -------------------------------------------------------------------------- */
+        /*  THREE.JS GAME ENGINE INITIALIZATION & SCENE SETUP                        */
+        /* -------------------------------------------------------------------------- */
+        let scene, camera, renderer;
+        let playerMesh, cameraPivot;
+        let isFirstPerson = false;
+        const keys = {};
+        let enemies = [];
+        let npcs = [];
+        let particles = [];
+        let activeNpcNear = null;
+
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0c14);
+            scene.fog = new THREE.FogExp2(0x181528, 0.015);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Ambient & Directional Lighting
+            const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.4);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfff7ed, 0.9);
+            sunLight.position.set(40, 80, 40);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 250;
+            const d = 60;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Volcanic Lava Glow Light
+            const lavaLight = new THREE.PointLight(0xff3300, 2, 80);
+            lavaLight.position.set(0, 10, -120);
+            scene.add(lavaLight);
+
+            // Build Environment
+            createEnvironment();
+
+            // Build Player Character
+            createPlayer();
+
+            // Build Initial World Entities (NPCs & Enemies)
+            spawnNPCs();
+            spawnEnemies();
+            createVolcanoParticles();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+                if (e.key.toLowerCase() === 'v') toggleCameraView();
+                if (e.key.toLowerCase() === 'e') interactNPC();
+                if (e.key.toLowerCase() === 'i') toggleModal('inventory-modal');
+                if (e.key.toLowerCase() === 'k') toggleModal('skill-modal');
+                if (e.key.toLowerCase() === 'l') toggleModal('story-modal');
+            });
+            window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+            // Mouse Click for Attacks
+            window.addEventListener('mousedown', (e) => {
+                audioFX.init();
+                if (e.button === 0) useSkill(1); // Left Click: Sword Attack
+                if (e.button === 2) useSkill(2); // Right Click: Hypnotic Wave
+            });
+            window.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Start Game Loop
+            animate();
+        }
+
+        function createEnvironment() {
+            // Main Terrain Geometry
+            const terrainGeo = new THREE.PlaneGeometry(300, 300, 64, 64);
+            terrainGeo.rotateX(-Math.PI / 2);
+
+            // Deform Terrain Vertices (Village vs Mountain & Volcano Crater)
+            const pos = terrainGeo.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                const x = pos.getX(i);
+                const z = pos.getZ(i);
+
+                // Volcano Zone in Negative Z (-80 to -150)
+                if (z < -50) {
+                    const distToVolcanoCenter = Math.hypot(x, z + 120);
+                    if (distToVolcanoCenter < 40) {
+                        // Crater Rim
+                        pos.setY(i, Math.sin(distToVolcanoCenter * 0.1) * 15 + (40 - distToVolcanoCenter) * 0.4);
+                    } else {
+                        pos.setY(i, Math.sin(x * 0.05) * 4 + Math.cos(z * 0.05) * 4);
+                    }
+                } else {
+                    // Gentle Village Slopes & Piles
+                    pos.setY(i, Math.sin(x * 0.08) * 1.5 + Math.cos(z * 0.08) * 1.5);
+                }
+            }
+            terrainGeo.computeVertexNormals();
+
+            const terrainMat = new THREE.MeshStandardMaterial({
+                color: 0x3a4f28,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+
+            // Volcanic Lava River Mesh
+            const lavaGeo = new THREE.PlaneGeometry(50, 80);
+            lavaGeo.rotateX(-Math.PI / 2);
+            const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+            const lava = new THREE.Mesh(lavaGeo, lavaMat);
+            lava.position.set(0, 0.2, -120);
+            scene.add(lava);
+
+            // Hamilton Village Houses
+            for (let i = 0; i < 8; i++) {
+                const house = createHouseGroup();
+                const angle = (i / 8) * Math.PI * 1.5 - Math.PI * 0.75;
+                house.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35 + 20);
+                house.rotation.y = Math.random() * Math.PI;
+                scene.add(house);
+            }
+
+            // Trash Piles outside Village
+            for (let i = 0; i < 6; i++) {
+                const trash = createTrashPile();
+                trash.position.set(Math.sin(i) * 25 + 10, 0, Math.cos(i) * 15 + 15);
+                scene.add(trash);
+            }
+        }
+
+        function createHouseGroup() {
+            const group = new THREE.Group();
+            // Walls
+            const wallGeo = new THREE.BoxGeometry(6, 5, 6);
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+            const walls = new THREE.Mesh(wallGeo, wallMat);
+            walls.position.y = 2.5;
+            walls.castShadow = true;
+            walls.receiveShadow = true;
+            group.add(walls);
+
+            // Roof
+            const roofGeo = new THREE.ConeGeometry(5, 3.5, 4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.6 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = 6.25;
+            roof.rotation.y = Math.PI / 4;
+            roof.castShadow = true;
+            group.add(roof);
+
+            return group;
+        }
+
+        function createTrashPile() {
+            const group = new THREE.Group();
+            const trashMat = new THREE.MeshStandardMaterial({ color: 0x42382e, roughness: 0.9 });
+            
+            for (let i = 0; i < 5; i++) {
+                const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 1.2), trashMat);
+                box.position.set((Math.random() - 0.5) * 2, 0.5, (Math.random() - 0.5) * 2);
+                box.rotation.set(Math.random(), Math.random(), Math.random());
+                box.castShadow = true;
+                group.add(box);
+            }
+            return group;
+        }
+
+        function createPlayer() {
+            playerMesh = new THREE.Group();
+
+            // Body / Armor
+            const bodyGeo = new THREE.CylinderGeometry(0.5, 0.4, 1.6, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.4 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.2;
+            body.castShadow = true;
+            playerMesh.add(body);
+
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.35, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.2;
+            head.castShadow = true;
+            playerMesh.add(head);
+
+            // Sword
+            const swordGeo = new THREE.BoxGeometry(0.1, 1.2, 0.2);
+            const swordMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.8, roughness: 0.2 });
+            const sword = new THREE.Mesh(swordGeo, swordMat);
+            sword.position.set(0.6, 1.4, 0.4);
+            sword.rotation.x = Math.PI / 4;
+            playerMesh.add(sword);
+
+            playerMesh.position.set(0, 0, 35);
+            scene.add(playerMesh);
+
+            // Camera Pivot Assembly
+            cameraPivot = new THREE.Object3D();
+            playerMesh.add(cameraPivot);
+            cameraPivot.position.set(0, 2, 0);
+            
+            updateCameraPosition();
+        }
+
+        function toggleCameraView() {
+            isFirstPerson = !isFirstPerson;
+            updateCameraPosition();
+            document.getElementById('camera-icon').className = isFirstPerson ? "fa-solid fa-eye" : "fa-solid fa-video";
+        }
+
+        function updateCameraPosition() {
+            if (isFirstPerson) {
+                camera.position.set(0, 0.4, -0.2);
+                camera.rotation.set(0, Math.PI, 0);
+                cameraPivot.add(camera);
+            } else {
+                camera.position.set(0, 3, 7);
+                camera.lookAt(0, 1, 0);
+                cameraPivot.add(camera);
+            }
+        }
+
+        function spawnNPCs() {
+            // NPC 1: Crying Villager
+            const npc1 = createNPCMesh(0x10b981);
+            npc1.position.set(5, 0, 25);
+            npc1.userData = {
+                name: "Hamilton Villager",
+                dialogue: [
+                    "Oh my! Rats is a contagious disease affecting our health!",
+                    "Our gracious Piper came with his Flute of Hypnosis to save us!",
+                    "Please clean up the remaining trash piles and rats outside!"
+                ]
+            };
+            scene.add(npc1);
+            npcs.push(npc1);
+
+            // NPC 2: The Piper (Initial Negotiation in Village)
+            const piper = createNPCMesh(0x9333ea);
+            piper.position.set(-8, 0, 15);
+            piper.userData = {
+                name: "The Gracious Piper",
+                dialogue: [
+                    "I used my Flute of Hypnosis to lead the rats away from Hamilton.",
+                    "Yet the ungrateful villagers refuse to give me my rightful reward!",
+                    "Treasure my warning... Broken promises have dire consequences."
+                ]
+            };
+            scene.add(piper);
+            npcs.push(piper);
+        }
+
+        function createNPCMesh(colorHex) {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.5, 0.4, 1.6, 8),
+                new THREE.MeshStandardMaterial({ color: colorHex })
+            );
+            body.position.y = 1.2;
+            body.castShadow = true;
+            group.add(body);
+
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.35, 8, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffedd5 })
+            );
+            head.position.y = 2.2;
+            group.add(head);
+
+            return group;
+        }
+
+        function spawnEnemies() {
+            // Spawn 5 Giant Trash Rats
+            for (let i = 0; i < 5; i++) {
+                const rat = createRatMesh();
+                rat.position.set((Math.random() - 0.5) * 40, 0, 10 + Math.random() * 20);
+                rat.userData = {
+                    type: "Rat",
+                    name: "Contagious Trash Rat",
+                    hp: 40,
+                    maxHp: 40,
+                    atk: 8,
+                    exp: 25,
+                    speed: 0.05
+                };
+                scene.add(rat);
+                enemies.push(rat);
+            }
+
+            // Spawn The Piper Boss in Volcanic Zone (-110 Z)
+            const piperBoss = createNPCMesh(0xd97706);
+            piperBoss.scale.set(1.5, 1.5, 1.5);
+            piperBoss.position.set(0, 2, -110);
+            piperBoss.userData = {
+                type: "Boss",
+                name: "The Piper For Hamilton",
+                hp: 1000,
+                maxHp: 1000,
+                atk: 22,
+                exp: 500,
+                speed: 0.06
+            };
+            scene.add(piperBoss);
+            enemies.push(piperBoss);
+        }
+
+        function createRatMesh() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.6, 1.4),
+                new THREE.MeshStandardMaterial({ color: 0x451a03 })
+            );
+            body.position.y = 0.3;
+            body.castShadow = true;
+            group.add(body);
+
+            // Eyes
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+            const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1, 4, 4), eyeMat);
+            eyeL.position.set(0.25, 0.4, -0.6);
+            const eyeR = eyeL.clone();
+            eyeR.position.x = -0.25;
+            group.add(eyeL);
+            group.add(eyeR);
+
+            return group;
+        }
+
+        function createVolcanoParticles() {
+            const count = 150;
+            const geo = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+
+            for (let i = 0; i < count * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 80;
+                positions[i + 1] = Math.random() * 30;
+                positions[i + 2] = -120 + (Math.random() - 0.5) * 60;
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const mat = new THREE.PointsMaterial({ color: 0xff6600, size: 0.6, transparent: true, opacity: 0.8 });
+            const particleSystem = new THREE.Points(geo, mat);
+            scene.add(particleSystem);
+            particles.push(particleSystem);
+        }
+
+        /* -------------------------------------------------------------------------- */
+        /*  COMBAT, SKILLS & QUEST PROGRESSION LOGIC                                 */
+        /* -------------------------------------------------------------------------- */
+        function useSkill(skillId) {
+            if (playerState.hp <= 0) return;
+
+            if (skillId === 1) { // Sword Attack
+                audioFX.playAttack();
+                performMeleeAttack();
+            } else if (skillId === 2) { // Hypnotic Wave
+                if (playerState.mp < 15) return;
+                playerState.mp -= 15;
+                audioFX.playFluteSpell();
+                performAreaAttack();
+                updateHUD();
+            } else if (skillId === 3) { // Shield Block
+                playerState.isBlocking = true;
+                setTimeout(() => { playerState.isBlocking = false; }, 1500);
+            }
+        }
+
+        function performMeleeAttack() {
+            enemies.forEach((enemy, idx) => {
+                if (!enemy.visible) return;
+                const dist = playerMesh.position.distanceTo(enemy.position);
+                if (dist < 3.5) {
+                    const dmg = playerState.atk + Math.floor(Math.random() * 8);
+                    applyDamageToEnemy(enemy, dmg, idx);
+                }
+            });
+        }
+
+        function performAreaAttack() {
+            enemies.forEach((enemy, idx) => {
+                if (!enemy.visible) return;
+                const dist = playerMesh.position.distanceTo(enemy.position);
+                if (dist < 8) {
+                    const dmg = playerState.atk * 1.6;
+                    applyDamageToEnemy(enemy, Math.floor(dmg), idx);
+                }
+            });
+        }
+
+        function applyDamageToEnemy(enemy, dmg, idx) {
+            enemy.userData.hp -= dmg;
+            audioFX.playHit();
+            showDamagePopup(dmg, enemy.position);
+
+            if (enemy.userData.type === "Boss") {
+                document.getElementById('boss-hud').classList.remove('hidden');
+                document.getElementById('boss-hud').classList.add('flex');
+                const percent = Math.max(0, (enemy.userData.hp / enemy.userData.maxHp) * 100);
+                document.getElementById('boss-hp-bar').style.width = percent + '%';
+                document.getElementById('boss-hp-text').innerText = `${Math.max(0, enemy.userData.hp)} / ${enemy.userData.maxHp}`;
+            }
+
+            if (enemy.userData.hp <= 0) {
+                enemy.visible = false;
+                gainEXP(enemy.userData.exp);
+
+                // Quest 1 Progress (Rats)
+                if (enemy.userData.type === "Rat" && playerState.currentQuestIndex === 0) {
+                    quests[0].currentCount++;
+                    updateQuestTracker();
+                    if (quests[0].currentCount >= quests[0].targetCount) {
+                        advanceQuest();
+                    }
+                }
+
+                // Quest 4 Progress (Piper Boss)
+                if (enemy.userData.type === "Boss") {
+                    document.getElementById('boss-hud').classList.add('hidden');
+                    showVictoryScreen();
+                }
+            }
+        }
+
+        function showDamagePopup(amount, pos3D) {
+            const popup = document.createElement('div');
+            popup.className = 'damage-popup text-yellow-400 text-lg';
+            popup.innerText = `-${amount}`;
+            
+            // Map 3D pos to 2D screen coordinates
+            const vector = pos3D.clone();
+            vector.project(camera);
+            const x = (vector.x * .5 + .5) * window.innerWidth;
+            const y = (-(vector.y * .5) + .5) * window.innerHeight;
+
+            popup.style.left = `${x}px`;
+            popup.style.top = `${y}px`;
+            document.body.appendChild(popup);
+
+            setTimeout(() => popup.remove(), 800);
+        }
+
+        function gainEXP(amount) {
+            playerState.exp += amount;
+            if (playerState.exp >= playerState.maxExp) {
+                playerState.level++;
+                playerState.exp -= playerState.maxExp;
+                playerState.maxExp = Math.floor(playerState.maxExp * 1.4);
+                playerState.maxHp += 20;
+                playerState.hp = playerState.maxHp;
+                playerState.atk += 5;
+                playerState.skillPoints++;
+                audioFX.playLevelUp();
+            }
+            updateHUD();
+        }
+
+        function advanceQuest() {
+            if (playerState.currentQuestIndex < quests.length - 1) {
+                playerState.currentQuestIndex++;
+                updateQuestTracker();
+            }
+        }
+
+        function updateQuestTracker() {
+            const q = quests[playerState.currentQuestIndex];
+            document.getElementById('quest-tracker-title').innerText = q.title;
+            document.getElementById('quest-tracker-desc').innerText = q.desc;
+            document.getElementById('quest-tracker-progress').innerText = `${q.currentCount} / ${q.targetCount}`;
+            document.getElementById('quest-number-tag').innerText = `Q${q.id}`;
+            document.getElementById('location-name').innerText = q.locationName;
+        }
+
+        function interactNPC() {
+            if (!activeNpcNear) return;
+            const dialogueText = activeNpcNear.userData.dialogue[0];
+            document.getElementById('npc-dialogue-title').innerText = activeNpcNear.userData.name;
+            document.getElementById('npc-dialogue-text').innerText = `"${dialogueText}"`;
+            document.getElementById('dialogue-modal').classList.remove('hidden');
+
+            if (playerState.currentQuestIndex === 1 && activeNpcNear.userData.name === "The Gracious Piper") {
+                quests[1].currentCount = 1;
+                advanceQuest();
+            }
+        }
+
+        function closeDialogue() {
+            document.getElementById('dialogue-modal').classList.add('hidden');
+        }
+
+        function advanceDialogue() {
+            closeDialogue();
+        }
+
+        function toggleModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+            renderInventoryGrid();
+            updateSkillUI();
+        }
+
+        function renderInventoryGrid() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+            inventory.forEach(item => {
+                const el = document.createElement('div');
+                el.className = "bg-amber-950/60 p-2 rounded border border-amber-900 flex flex-col items-center justify-center text-center gap-1 cursor-pointer hover:border-amber-500 transition";
+                el.innerHTML = `
+                    <i class="fa-solid ${item.icon} text-amber-400 text-lg"></i>
+                    <span class="text-[10px] text-gray-200 font-bold leading-tight">${item.name}</span>
+                `;
+                grid.appendChild(el);
+            });
+        }
+
+        function upgradeSkill(id) {
+            if (playerState.skillPoints > 0 && playerState.skills[id] < 3) {
+                playerState.skillPoints--;
+                playerState.skills[id]++;
+                if (id === 1) playerState.atk += 8;
+                if (id === 2) { playerState.maxHp += 30; playerState.hp += 30; }
+                if (id === 3) playerState.speed += 0.03;
+                updateSkillUI();
+                updateHUD();
+            }
+        }
+
+        function updateSkillUI() {
+            document.getElementById('skill-points-num').innerText = playerState.skillPoints;
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`skill-lvl-${i}`).innerText = `Lvl ${playerState.skills[i]}/3`;
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('player-level').innerText = `LVL ${playerState.level}`;
+            document.getElementById('hp-text').innerText = `${Math.max(0, Math.floor(playerState.hp))} / ${playerState.maxHp}`;
+            document.getElementById('hp-bar').style.width = `${Math.max(0, (playerState.hp / playerState.maxHp) * 100)}%`;
+
+            document.getElementById('mp-text').innerText = `${Math.floor(playerState.mp)} / ${playerState.maxMp}`;
+            document.getElementById('mp-bar').style.width = `${(playerState.mp / playerState.maxMp) * 100}%`;
+
+            document.getElementById('exp-text').innerText = `${playerState.exp} / ${playerState.maxExp}`;
+            document.getElementById('exp-bar').style.width = `${(playerState.exp / playerState.maxExp) * 100}%`;
+
+            document.getElementById('stat-atk').innerText = playerState.atk;
+            document.getElementById('stat-def').innerText = playerState.def;
+        }
+
+        function showVictoryScreen() {
+            document.getElementById('game-over-icon').className = "text-5xl text-amber-400 mb-1";
+            document.getElementById('game-over-icon').innerHTML = `<i class="fa-solid fa-trophy"></i>`;
+            document.getElementById('game-over-title').innerText = "LESSON LEARNED & PIPER DEFEATED";
+            document.getElementById('game-over-title').className = "font-cinzel text-xl font-bold text-amber-300";
+            document.getElementById('game-over-desc').innerText = "You saved Hamilton and fulfilled the reward to the gracious Piper! Disobedience & broken promises will no longer plague the realm.";
+            document.getElementById('game-over-modal').classList.remove('hidden');
+        }
+
+        function restartGame() {
+            location.reload();
+        }
+
+        /* -------------------------------------------------------------------------- */
+        /*  MAIN GAME LOOP & ANIMATION                                               */
+        /* -------------------------------------------------------------------------- */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Handle Movement
+            const spd = playerState.speed;
+            if (keys['w']) playerMesh.translateZ(-spd);
+            if (keys['s']) playerMesh.translateZ(spd);
+            if (keys['a']) playerMesh.rotation.y += 0.04;
+            if (keys['d']) playerMesh.rotation.y -= 0.04;
+
+            // Passive MP Regeneration
+            if (playerState.mp < playerState.maxMp) {
+                playerState.mp = Math.min(playerState.maxMp, playerState.mp + 0.05);
+                updateHUD();
+            }
+
+            // Check Proximity to NPCs
+            activeNpcNear = null;
+            npcs.forEach(npc => {
+                const dist = playerMesh.position.distanceTo(npc.position);
+                if (dist < 4) {
+                    activeNpcNear = npc;
+                }
+            });
+
+            const promptEl = document.getElementById('interaction-prompt');
+            if (activeNpcNear) {
+                document.getElementById('npc-prompt-name').innerText = activeNpcNear.userData.name;
+                promptEl.classList.remove('hidden');
+            } else {
+                promptEl.classList.add('hidden');
+            }
+
+            // Enemy AI Movement & Attack Logic
+            enemies.forEach(enemy => {
+                if (!enemy.visible) return;
+                const dist = playerMesh.position.distanceTo(enemy.position);
+
+                if (dist < 20) {
+                    // Move towards player
+                    enemy.lookAt(playerMesh.position.x, enemy.position.y, playerMesh.position.z);
+                    enemy.translateZ(enemy.userData.speed);
+
+                    // Attack Player
+                    if (dist < 2.2) {
+                        let dmg = enemy.userData.atk;
+                        if (playerState.isBlocking) dmg *= 0.3;
+                        playerState.hp -= dmg * 0.03;
+                        updateHUD();
+
+                        if (playerState.hp <= 0) {
+                            document.getElementById('game-over-modal').classList.remove('hidden');
+                        }
+                    }
+                }
+            });
+
+            // Animate Particles
+            particles.forEach(p => {
+                p.rotation.y += 0.002;
+            });
+
+            // Render Scene
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize 3D Engine on Window Load
+        window.onload = function() {
+            init3D();
+            updateQuestTracker();
+            updateHUD();
+        };
+    </script>
+</body>
+</html>
